@@ -1,1 +1,329 @@
+import streamlit as st
+import math
+import time
 
+# Game constants
+HUMAN = "X"
+AI = "O"
+EMPTY = " "
+
+WIN_COMBINATIONS = [
+    (0, 1, 2), (3, 4, 5), (6, 7, 8),  # rows
+    (0, 3, 6), (1, 4, 7), (2, 5, 8),  # columns
+    (0, 4, 8), (2, 4, 6),             # diagonals
+]
+
+def is_winner(board, player):
+    """Check if the given player has won the game"""
+    return any(board[a] == board[b] == board[c] == player for a, b, c in WIN_COMBINATIONS)
+
+def is_board_full(board):
+    """Check if the board is completely filled"""
+    return all(cell != EMPTY for cell in board)
+
+def evaluate(board):
+    """Evaluate the current board state for minimax algorithm"""
+    if is_winner(board, AI):
+        return 1
+    elif is_winner(board, HUMAN):
+        return -1
+    return 0
+
+def minimax(board, depth, alpha, beta, maximizing):
+    """
+    Minimax algorithm with alpha-beta pruning
+    Returns: (best_score, best_move)
+    """
+    score = evaluate(board)
+    
+    # Terminal conditions
+    if score != 0 or is_board_full(board):
+        return score, None
+    
+    if maximizing:  # AI's turn (maximizing player)
+        best_score = -math.inf
+        best_move = None
+        
+        for i in range(9):
+            if board[i] == EMPTY:
+                board[i] = AI
+                current_score, _ = minimax(board, depth + 1, alpha, beta, False)
+                board[i] = EMPTY
+                
+                if current_score > best_score:
+                    best_score = current_score
+                    best_move = i
+                
+                alpha = max(alpha, best_score)
+                if beta <= alpha:  # Alpha-beta pruning
+                    break
+        
+        return best_score, best_move
+    
+    else:  # Human's turn (minimizing player)
+        best_score = math.inf
+        best_move = None
+        
+        for i in range(9):
+            if board[i] == EMPTY:
+                board[i] = HUMAN
+                current_score, _ = minimax(board, depth + 1, alpha, beta, True)
+                board[i] = EMPTY
+                
+                if current_score < best_score:
+                    best_score = current_score
+                    best_move = i
+                
+                beta = min(beta, best_score)
+                if beta <= alpha:  # Alpha-beta pruning
+                    break
+        
+        return best_score, best_move
+
+def get_ai_move(board):
+    """Get the best move for AI using minimax algorithm"""
+    _, move = minimax(board, 0, -math.inf, math.inf, True)
+    
+    # Fallback: if minimax fails, find first available move
+    if move is None:
+        for i in range(9):
+            if board[i] == EMPTY:
+                return i
+    
+    return move
+
+def get_available_moves(board):
+    """Get list of available moves"""
+    return [i for i in range(9) if board[i] == EMPTY]
+
+# ---------------- Streamlit UI ----------------
+st.set_page_config(
+    page_title="Tic-Tac-Toe AI", 
+    page_icon="🎮", 
+    layout="centered"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .game-title {
+        text-align: center;
+        color: #2E86AB;
+        font-size: 3em;
+        margin-bottom: 0.5em;
+    }
+    
+    .game-info {
+        text-align: center;
+        font-size: 1.2em;
+        margin-bottom: 1em;
+        padding: 10px;
+        border-radius: 10px;
+        background-color: #f0f2f6;
+    }
+    
+    .turn-indicator {
+        text-align: center;
+        font-size: 1.5em;
+        font-weight: bold;
+        margin: 1em 0;
+        padding: 10px;
+        border-radius: 10px;
+    }
+    
+    .human-turn {
+        background-color: #e8f5e8;
+        color: #2d5a2d;
+    }
+    
+    .ai-turn {
+        background-color: #ffe8e8;
+        color: #5a2d2d;
+    }
+    
+    .game-stats {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 1em 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Game title and description
+st.markdown('<h1 class="game-title">🤖 Tic-Tac-Toe AI</h1>', unsafe_allow_html=True)
+st.markdown('<div class="game-info">Challenge yourself against an unbeatable AI using Minimax algorithm with Alpha-Beta pruning!</div>', unsafe_allow_html=True)
+
+# Initialize game state
+if "board" not in st.session_state:
+    st.session_state.board = [EMPTY] * 9
+    st.session_state.turn = HUMAN
+    st.session_state.winner = None
+    st.session_state.game_over = False
+    st.session_state.moves_count = 0
+    st.session_state.human_wins = 0
+    st.session_state.ai_wins = 0
+    st.session_state.draws = 0
+
+board = st.session_state.board
+
+# Game statistics
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Your Wins", st.session_state.human_wins)
+with col2:
+    st.metric("AI Wins", st.session_state.ai_wins)
+with col3:
+    st.metric("Draws", st.session_state.draws)
+with col4:
+    st.metric("Moves", st.session_state.moves_count)
+
+# Game status and turn indicator
+if st.session_state.winner:
+    if "You win" in st.session_state.winner:
+        st.success(f"🎉 {st.session_state.winner}")
+    elif "AI wins" in st.session_state.winner:
+        st.error(f"🤖 {st.session_state.winner}")
+    else:
+        st.info(st.session_state.winner)
+elif is_board_full(board):
+    st.info("🤝 It's a draw! Great game!")
+    if not st.session_state.game_over:
+        st.session_state.draws += 1
+        st.session_state.game_over = True
+else:
+    # Show whose turn it is
+    if st.session_state.turn == HUMAN:
+        st.markdown('<div class="turn-indicator human-turn">🎯 Your Turn (X)</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="turn-indicator ai-turn">🤖 AI is thinking... (O)</div>', unsafe_allow_html=True)
+
+# Create the game board with better styling
+st.markdown("### Game Board")
+
+# Draw 3x3 grid with improved styling
+for i in range(3):
+    cols = st.columns([1, 1, 1])
+    for j in range(3):
+        idx = i * 3 + j
+        with cols[j]:
+            # Determine button content and state
+            if board[idx] == EMPTY:
+                button_label = "⬜"  # Empty square
+                disabled = st.session_state.winner is not None or st.session_state.turn != HUMAN
+            else:
+                button_label = "❌" if board[idx] == HUMAN else "⭕"
+                disabled = True
+            
+            # Handle human move
+            if st.button(
+                button_label, 
+                key=f"cell_{idx}", 
+                disabled=disabled,
+                use_container_width=True,
+                help=f"Position {idx+1}" if board[idx] == EMPTY else None
+            ):
+                if board[idx] == EMPTY and st.session_state.turn == HUMAN and not st.session_state.winner:
+                    # Human makes a move
+                    board[idx] = HUMAN
+                    st.session_state.moves_count += 1
+                    
+                    # Check if human wins
+                    if is_winner(board, HUMAN):
+                        st.session_state.winner = "You win! 🏆"
+                        st.session_state.human_wins += 1
+                        st.session_state.game_over = True
+                    elif is_board_full(board):
+                        st.session_state.winner = "It's a draw!"
+                        st.session_state.draws += 1
+                        st.session_state.game_over = True
+                    else:
+                        # Switch to AI turn
+                        st.session_state.turn = AI
+                        st.rerun()
+
+# AI move logic (separate from button clicks)
+if (st.session_state.turn == AI and 
+    not st.session_state.winner and 
+    not is_board_full(board)):
+    
+    # Add a small delay for better UX
+    time.sleep(0.5)
+    
+    # AI makes its move
+    ai_idx = get_ai_move(board)
+    board[ai_idx] = AI
+    st.session_state.moves_count += 1
+    
+    # Check if AI wins
+    if is_winner(board, AI):
+        st.session_state.winner = "AI wins! 🤖"
+        st.session_state.ai_wins += 1
+        st.session_state.game_over = True
+    elif is_board_full(board):
+        st.session_state.winner = "It's a draw!"
+        st.session_state.draws += 1
+        st.session_state.game_over = True
+    else:
+        # Switch back to human turn
+        st.session_state.turn = HUMAN
+    
+    st.rerun()
+
+# Control buttons
+col1, col2, col3 = st.columns([1, 1, 1])
+
+with col1:
+    if st.button("🔄 New Game", use_container_width=True):
+        st.session_state.board = [EMPTY] * 9
+        st.session_state.turn = HUMAN
+        st.session_state.winner = None
+        st.session_state.game_over = False
+        st.session_state.moves_count = 0
+        st.rerun()
+
+with col2:
+    if st.button("📊 Reset Stats", use_container_width=True):
+        st.session_state.human_wins = 0
+        st.session_state.ai_wins = 0
+        st.session_state.draws = 0
+        st.rerun()
+
+with col3:
+    available_moves = get_available_moves(board)
+    if available_moves and not st.session_state.winner:
+        if st.button("💡 Hint", use_container_width=True):
+            hint_move = get_ai_move(board)
+            st.info(f"💡 Hint: Try position {hint_move + 1}")
+
+# Game instructions
+with st.expander("ℹ️ How to Play"):
+    st.markdown("""
+    **Game Rules:**
+    - You are **X** (❌), AI is **O** (⭕)
+    - Click on any empty square (⬜) to make your move
+    - Get three in a row (horizontal, vertical, or diagonal) to win
+    - The AI uses the Minimax algorithm, making it unbeatable
+    - Best you can do is draw! 🤝
+    
+    **Features:**
+    - 🎯 Visual turn indicators
+    - 📊 Game statistics tracking
+    - 💡 Hint system (shows AI's recommended move)
+    - 🔄 Easy game reset
+    - 🤖 Unbeatable AI opponent
+    """)
+
+# Technical details
+with st.expander("🔧 Technical Details"):
+    st.markdown("""
+    **AI Algorithm: Minimax with Alpha-Beta Pruning**
+    
+    The AI uses the Minimax algorithm to evaluate all possible game states:
+    - **Minimax**: Explores all possible moves to find the optimal strategy
+    - **Alpha-Beta Pruning**: Optimizes by eliminating branches that won't affect the final decision
+    - **Evaluation Function**: +1 for AI win, -1 for human win, 0 for draw
+    - **Perfect Play**: The AI will never lose - it will either win or draw
+    
+    This makes the AI mathematically unbeatable at tic-tac-toe!
+    """)
